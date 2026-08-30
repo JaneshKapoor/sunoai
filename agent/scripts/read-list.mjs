@@ -1,8 +1,9 @@
 /**
- * Milestone 2: "read the top posts aloud", driven by typed text.
+ * Milestone 2: "read the top items back", driven by typed text.
  *
- *   npm run read-feed          # top 3
- *   npm run read-feed -- 5     # top 5
+ *   npm run read                    # top 3 from TARGET_SITE
+ *   npm run read -- 5               # top 5
+ *   TARGET_SITE=linkedin npm run read
  *
  * Typed input stands in for voice on purpose — this proves harness + MCP +
  * model before any audio is in the picture. The text printed here is exactly
@@ -11,16 +12,19 @@
 import { config } from '../env.mjs';
 import { TrueForgeClient, toolCallsIn } from '../api.mjs';
 import { buildAgentSpec, modelFqnFor, APPROVAL_REQUIRED_TOOLS } from '../definition.mjs';
-import { readFeedPrompt } from '../linkedin.mjs';
+import { resolveSite } from '../sites/index.mjs';
 
 const DEFAULT_COUNT = 3;
+const MAX_COUNT = 10;
 
-const requested = Number(process.argv[2] ?? DEFAULT_COUNT);
-if (!Number.isInteger(requested) || requested < 1 || requested > 10) {
-  console.error(`Post count must be a whole number from 1 to 10 (got "${process.argv[2]}").`);
+const raw = process.argv[2] ?? String(DEFAULT_COUNT);
+const count = Number(raw);
+if (!Number.isInteger(count) || count < 1 || count > MAX_COUNT) {
+  console.error(`Count must be a whole number from 1 to ${MAX_COUNT} (got "${raw}").`);
   process.exit(1);
 }
 
+const site = resolveSite();
 const cfg = config();
 const client = new TrueForgeClient(cfg.trueforgeBaseUrl);
 await client.waitUntilReady();
@@ -29,11 +33,12 @@ const sessionId = await client.createSession(
   buildAgentSpec({ modelFqn: modelFqnFor(cfg.geminiModelId) }),
 );
 
+console.log(`site:    ${site.DISPLAY_NAME} (${site.LIST_URL})`);
 console.log(`session: ${sessionId}`);
-console.log(`reading top ${requested} posts ...\n`);
+console.log(`reading top ${count} ${site.ITEM_NOUN}s ...\n`);
 
-const turn = await client.runTurn(sessionId, [
-  { type: 'user.message', content: readFeedPrompt(requested) },
+const turn = await client.runTurnWithRetry(sessionId, [
+  { type: 'user.message', content: site.readListPrompt(count) },
 ]);
 
 if (turn.state.status !== 'done') {
@@ -46,14 +51,14 @@ const events = await client.get(
 );
 const toolNames = toolCallsIn(events).map((call) => call.name);
 
-console.log('─'.repeat(64));
+console.log('─'.repeat(70));
 console.log(turn.state.output?.content ?? '(no reply)');
-console.log('─'.repeat(64));
+console.log('─'.repeat(70));
 console.log(`\ntools called: ${toolNames.join(', ') || '(none)'}`);
 
-// Reading the feed must not touch anything. If a gated tool shows up here, the
-// agent tried to act during what should be a pure read, and that is worth
-// failing over even though the gate would have caught it.
+// Reading must not touch anything. If a gated tool shows up here, the agent
+// reached for a write during a pure read — worth failing over even though the
+// gate would have caught it.
 const gated = toolNames.filter((name) => APPROVAL_REQUIRED_TOOLS.includes(name));
 if (gated.length > 0) {
   console.error(`\n✗ A read-only request reached write tools: ${gated.join(', ')}`);
@@ -64,6 +69,6 @@ if (toolNames.length === 0) {
   process.exit(1);
 }
 
-console.log('\n✓ Milestone 2: top posts read back, no write tools touched.');
-console.log(`\nSession ${sessionId} is still open — the follow-up ("comment on the second one")`);
-console.log('continues in it, which is how the agent knows which post you mean.');
+console.log(`\n✓ Milestone 2: top ${site.ITEM_NOUN}s read back, no write tools touched.`);
+console.log(`\nSession ${sessionId} is still open — a follow-up ("the second one")`);
+console.log(`continues in it, which is how the agent knows which ${site.ITEM_NOUN} you mean.`);

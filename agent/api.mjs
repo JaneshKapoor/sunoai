@@ -55,6 +55,52 @@ export class TrueForgeClient {
   }
 
   /**
+   * Run one turn, retrying when the model provider is transiently unavailable.
+   *
+   * The free Gemini tier caps requests per minute, and gemini-3-flash-preview
+   * additionally returns 503 under load. Both surface as a failed turn rather
+   * than a slow one, which on a voice interface means the assistant simply
+   * stops talking. The error text carries a "retry in Ns" hint; we honour it.
+   *
+   * A retry re-runs the whole turn, so it is only safe when the turn changed
+   * nothing. If any approval-gated tool appears in the transcript, we refuse to
+   * retry and surface the error instead — re-running a turn that already
+   * submitted something could submit it twice, and that is precisely the class
+   * of accident this project exists to prevent.
+   */
+  async runTurnWithRetry(sessionId, input, { attempts = 3, ...options } = {}) {
+    let lastTurn;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      lastTurn = await this.runTurn(sessionId, input, options);
+      if (lastTurn.state?.status !== 'error') return lastTurn;
+
+      const message = lastTurn.state.message ?? '';
+      const isTransient = /\b(429|503)\b|quota|high demand|rate limit/i.test(message);
+      if (!isTransient || attempt === attempts) return lastTurn;
+
+      if (await this.turnTouchedGatedTools(sessionId, lastTurn.id)) {
+        return lastTurn;
+      }
+
+      // "Please retry in 48.35s" — believe the provider over a fixed backoff.
+      const hinted = message.match(/retry in ([\d.]+)s/i);
+      const waitMs = hinted ? Math.ceil(Number(hinted[1]) * 1000) + 1_000 : attempt * 15_000;
+      console.warn(`  model unavailable (attempt ${attempt}/${attempts}); retrying in ${Math.round(waitMs / 1000)}s`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+    return lastTurn;
+  }
+
+  /** True if the turn called any tool that requires human approval. */
+  async turnTouchedGatedTools(sessionId, turnId) {
+    const { APPROVAL_REQUIRED_TOOLS } = await import('./definition.mjs');
+    const events = await this.get(
+      `/api/v1/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/events`,
+    ).catch(() => []);
+    return toolCallsIn(events).some((call) => APPROVAL_REQUIRED_TOOLS.includes(call.name));
+  }
+
+  /**
    * Run one turn to completion and return its terminal state.
    *
    * Uses the non-streaming form plus polling rather than SSE: the scripted

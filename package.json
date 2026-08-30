@@ -9,8 +9,8 @@
     "bootstrap": "node agent/bootstrap.mjs",
     "smoke:model": "node agent/scripts/smoke-model.mjs",
     "smoke:browser": "node agent/scripts/smoke-browser.mjs",
-    "login": "node agent/scripts/linkedin-login.mjs",
-    "read-feed": "node agent/scripts/read-feed.mjs"
+    "login": "node agent/scripts/check-login.mjs",
+    "read": "node agent/scripts/read-list.mjs"
   },
   "license": "MIT",
   "type": "module",

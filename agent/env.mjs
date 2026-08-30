@@ -57,7 +57,13 @@ export function config() {
   return {
     geminiApiKey: required('GEMINI_API_KEY'),
     geminiModelId: process.env.GEMINI_MODEL_ID || 'gemini-3-flash-preview',
-    geminiFallbackModelId: process.env.GEMINI_FALLBACK_MODEL_ID || 'gemini-3.6-flash',
+    // Comma-separated. Registered alongside the primary so switching models is
+    // a one-line .env edit rather than a re-bootstrap. See README on why you
+    // need more than one.
+    geminiFallbackModelIds: (process.env.GEMINI_FALLBACK_MODEL_IDS || 'gemini-3.6-flash,gemini-3.5-flash,gemini-3.1-flash-lite')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
     trueforgePort: port,
     trueforgeBaseUrl: process.env.TRUEFORGE_BASE_URL || `http://localhost:${port}`,
     browserMcpPort: process.env.BROWSER_MCP_PORT || '8931',
