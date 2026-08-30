@@ -1,0 +1,69 @@
+/**
+ * Milestone 2: "read the top posts aloud", driven by typed text.
+ *
+ *   npm run read-feed          # top 3
+ *   npm run read-feed -- 5     # top 5
+ *
+ * Typed input stands in for voice on purpose — this proves harness + MCP +
+ * model before any audio is in the picture. The text printed here is exactly
+ * what the voice client will hand to TTS.
+ */
+import { config } from '../env.mjs';
+import { TrueForgeClient, toolCallsIn } from '../api.mjs';
+import { buildAgentSpec, modelFqnFor, APPROVAL_REQUIRED_TOOLS } from '../definition.mjs';
+import { readFeedPrompt } from '../linkedin.mjs';
+
+const DEFAULT_COUNT = 3;
+
+const requested = Number(process.argv[2] ?? DEFAULT_COUNT);
+if (!Number.isInteger(requested) || requested < 1 || requested > 10) {
+  console.error(`Post count must be a whole number from 1 to 10 (got "${process.argv[2]}").`);
+  process.exit(1);
+}
+
+const cfg = config();
+const client = new TrueForgeClient(cfg.trueforgeBaseUrl);
+await client.waitUntilReady();
+
+const sessionId = await client.createSession(
+  buildAgentSpec({ modelFqn: modelFqnFor(cfg.geminiModelId) }),
+);
+
+console.log(`session: ${sessionId}`);
+console.log(`reading top ${requested} posts ...\n`);
+
+const turn = await client.runTurn(sessionId, [
+  { type: 'user.message', content: readFeedPrompt(requested) },
+]);
+
+if (turn.state.status !== 'done') {
+  console.error(`✗ turn ended as "${turn.state.status}": ${turn.state.message ?? ''}`);
+  process.exit(1);
+}
+
+const events = await client.get(
+  `/api/v1/sessions/${sessionId}/turns/${encodeURIComponent(turn.id)}/events`,
+);
+const toolNames = toolCallsIn(events).map((call) => call.name);
+
+console.log('─'.repeat(64));
+console.log(turn.state.output?.content ?? '(no reply)');
+console.log('─'.repeat(64));
+console.log(`\ntools called: ${toolNames.join(', ') || '(none)'}`);
+
+// Reading the feed must not touch anything. If a gated tool shows up here, the
+// agent tried to act during what should be a pure read, and that is worth
+// failing over even though the gate would have caught it.
+const gated = toolNames.filter((name) => APPROVAL_REQUIRED_TOOLS.includes(name));
+if (gated.length > 0) {
+  console.error(`\n✗ A read-only request reached write tools: ${gated.join(', ')}`);
+  process.exit(1);
+}
+if (toolNames.length === 0) {
+  console.error('\n✗ The agent answered without touching the browser.');
+  process.exit(1);
+}
+
+console.log('\n✓ Milestone 2: top posts read back, no write tools touched.');
+console.log(`\nSession ${sessionId} is still open — the follow-up ("comment on the second one")`);
+console.log('continues in it, which is how the agent knows which post you mean.');
