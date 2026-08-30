@@ -57,6 +57,7 @@ export function config() {
   return {
     geminiApiKey: required('GEMINI_API_KEY'),
     geminiModelId: process.env.GEMINI_MODEL_ID || 'gemini-3-flash-preview',
+    geminiFallbackModelId: process.env.GEMINI_FALLBACK_MODEL_ID || 'gemini-3.6-flash',
     trueforgePort: port,
     trueforgeBaseUrl: process.env.TRUEFORGE_BASE_URL || `http://localhost:${port}`,
     browserMcpPort: process.env.BROWSER_MCP_PORT || '8931',
