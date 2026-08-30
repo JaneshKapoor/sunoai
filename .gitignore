@@ -25,6 +25,9 @@ venv/
 .browser-profile/
 playwright-report/
 test-results/
+# Page snapshots the MCP server writes as it works. Never commit these:
+# once we point the agent at LinkedIn they contain real feed content.
+.playwright-mcp/
 
 # Runtime artifacts
 logs/

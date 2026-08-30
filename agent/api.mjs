@@ -99,3 +99,33 @@ export class TrueForgeClient {
     }
   }
 }
+
+/**
+ * Pull the tool calls out of a turn's event list, in order.
+ *
+ * TrueForge does not emit a dedicated `tool.call` event: a tool call arrives as
+ * a `model.message` carrying a `tool_calls` array in OpenAI's function-call
+ * shape, and its result comes back later as a separate `tool.response`. Reading
+ * the transcript correctly means knowing that, so it lives here rather than
+ * being re-derived by every caller.
+ *
+ * @param {Array<object>} events  from GET /sessions/{id}/turns/{id}/events
+ * @returns {Array<{id: string, name: string, arguments: unknown}>}
+ */
+export function toolCallsIn(events) {
+  const calls = [];
+  for (const event of events ?? []) {
+    for (const call of event.tool_calls ?? []) {
+      let args = call.function?.arguments;
+      if (typeof args === 'string') {
+        try {
+          args = JSON.parse(args);
+        } catch {
+          // Leave the raw string; a malformed argument blob is worth seeing.
+        }
+      }
+      calls.push({ id: call.id, name: call.function?.name, arguments: args });
+    }
+  }
+  return calls;
+}

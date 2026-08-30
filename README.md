@@ -62,11 +62,19 @@ Start the harness and leave it running:
 npm run harness              # http://localhost:8790
 ```
 
-In a second terminal, register the model provider and check it answers:
+Start the browser-control MCP server in a second terminal and leave it running
+too:
+
+```bash
+npm run browser              # http://localhost:8931/mcp
+```
+
+In a third terminal, register both with the harness and check they work:
 
 ```bash
 npm run bootstrap
-npm run smoke:model
+npm run smoke:model          # harness -> Gemini
+npm run smoke:browser        # harness -> MCP -> Chrome
 ```
 
 `smoke:model` sends a code-switched Hinglish prompt and prints the reply:
@@ -79,8 +87,40 @@ reply:   Namaste! Main aapke sawaalon ke jawaab de sakta hoon aur daily tasks me
 ✓ Milestone 1: harness + gemini-3-flash-preview responding.
 ```
 
+`smoke:browser` sends the agent to a page and asserts it actually reached
+Chrome, rather than answering from memory:
+
+```
+tools called: browser_navigate, browser_snapshot
+reply: The heading is Example Domain. The first sentence is, This domain is for use in
+       documentation examples without needing permission.
+
+✓ Milestone 1b: agent navigated and extracted text via the browser MCP.
+```
+
 TrueForge's own UI is at http://localhost:8790 if you want to poke at the agent
 by hand.
+
+## What the agent is allowed to do
+
+The whole tool policy is one file, [`agent/definition.mjs`](agent/definition.mjs),
+so it cannot drift between the scripted checks, the voice client, and the UI.
+
+**Denied outright.** `browser_evaluate` and `browser_run_code_unsafe` run
+arbitrary JavaScript in the page. That is a hole straight through the approval
+gate — the model could submit a comment with a scripted click and the harness
+would see a read-shaped tool call. The gate only means something if every route
+to a write passes through a tool the gate covers. `browser_file_upload` and
+`browser_drop` are denied too: nothing in scope uploads a file.
+
+**Gated on approval.** `browser_click`, `browser_type`, `browser_fill_form`,
+`browser_press_key`, `browser_select_option` — everything left that can change
+a page. They are listed by name rather than via TrueForge's `@write` preset,
+because the preset's meaning comes from tool metadata we do not control and the
+project's safety claim rests on this list being exactly right.
+
+**Free.** Navigation, snapshots, find, screenshots. Gating reads would train the
+user to approve on reflex, which is how approval gates stop working.
 
 ## Configuration
 
@@ -93,6 +133,22 @@ Every key lives in `.env`, which is gitignored. Nothing is hardcoded. See
 | `GEMINI_MODEL_ID` | Defaults to `gemini-3-flash-preview` |
 | `TRUEFORGE_PORT` / `TRUEFORGE_BASE_URL` | Where the harness listens |
 | `BROWSER_MCP_PORT` / `BROWSER_MCP_URL` | Where the Playwright MCP server listens |
+
+## A note on the model
+
+`gemini-3-flash-preview` intermittently returns:
+
+```
+503 This model is currently experiencing high demand.
+```
+
+This reproduces against the Gemini API directly, with no TrueForge in the path,
+so it is upstream congestion rather than anything here. The harness retries
+internally, which means a congested turn *hangs* rather than failing fast.
+
+`npm run bootstrap` therefore registers a fallback model
+(`GEMINI_FALLBACK_MODEL_ID`, default `gemini-3.6-flash`) alongside the primary.
+Switching is one line in `.env` — no re-bootstrap, no debugging on camera.
 
 ## A note on Windows
 
@@ -117,9 +173,10 @@ macOS and Linux and safe to re-run.
 agent/      TrueForge setup and scripted checks
   env.mjs         .env loader and config resolver
   api.mjs         TrueForge HTTP API client
+  definition.mjs  agent instructions + tool policy (single source of truth)
   bootstrap.mjs   idempotent harness setup
   scripts/        milestone checks
-scripts/    repo tooling (harness launcher, Windows patch)
+scripts/    repo tooling (launchers, Windows patch)
 voice/      Python voice client            (milestone 4)
 ui/         "Jarvis" status page           (milestone 5)
 docs/       demo script and notes
@@ -128,7 +185,7 @@ docs/       demo script and notes
 ## Status
 
 - [x] **1** — Harness running, Gemini 3 Flash responding
-- [ ] **1b** — Browser-control MCP navigating and extracting text
+- [x] **1b** — Browser-control MCP navigating and extracting text
 - [ ] **2** — "Read top posts aloud", typed input
 - [ ] **3** — Comment draft → approval gate → submit, typed input
 - [ ] **4** — Real voice: STT in, TTS out

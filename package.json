@@ -5,12 +5,15 @@
   "scripts": {
     "postinstall": "node scripts/patch-kysely-windows.mjs",
     "harness": "node scripts/harness.mjs",
+    "browser": "node scripts/browser-mcp.mjs",
     "bootstrap": "node agent/bootstrap.mjs",
-    "smoke:model": "node agent/scripts/smoke-model.mjs"
+    "smoke:model": "node agent/scripts/smoke-model.mjs",
+    "smoke:browser": "node agent/scripts/smoke-browser.mjs"
   },
   "license": "MIT",
   "type": "module",
   "dependencies": {
+    "@playwright/mcp": "^0.0.79",
     "@truefoundry/trueforge": "^0.1.4"
   },
   "private": true,
