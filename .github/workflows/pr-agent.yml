@@ -47,7 +47,11 @@ jobs:
           # notes; this repo's PRs are small and a single summary is readable.
           PR_REVIEWER.PERSISTENT_COMMENT: "true"
           PR_REVIEWER.FINAL_UPDATE_MESSAGE: "false"
-          # Auto-run on a new PR: describe what changed, then review it.
           GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
           GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
           GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "true"
+          # pr-agent defaults to reviewing only newly opened PRs and logs
+          # "Skipping action: synchronize" for everything else. A PR that gets
+          # reworked after review is exactly the one worth re-reviewing, so
+          # pushes are included explicitly.
+          GITHUB_ACTION_CONFIG.PR_ACTIONS: '["opened","reopened","ready_for_review","review_requested","synchronize"]'
