@@ -1,0 +1,20 @@
+{
+  "name": "sunoai",
+  "version": "0.1.0",
+  "description": "Hinglish voice agent that drives LinkedIn through TrueForge + a browser-control MCP, with a human approval gate on every write.",
+  "scripts": {
+    "postinstall": "node scripts/patch-kysely-windows.mjs",
+    "harness": "node scripts/harness.mjs",
+    "bootstrap": "node agent/bootstrap.mjs",
+    "smoke:model": "node agent/scripts/smoke-model.mjs"
+  },
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@truefoundry/trueforge": "^0.1.4"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.14"
+  }
+}
