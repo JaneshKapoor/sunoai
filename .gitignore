@@ -1,0 +1,32 @@
+# Node
+node_modules/
+npm-debug.log*
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Secrets — never commit
+.env
+.env.local
+*.pem
+*.key
+
+# TrueForge local state
+.trueforge/
+*.sqlite
+*.sqlite-journal
+
+# Playwright / browser profiles
+.browser-profile/
+playwright-report/
+test-results/
+
+# Runtime artifacts
+logs/
+*.log
+audio_tmp/
