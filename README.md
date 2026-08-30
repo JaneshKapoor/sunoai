@@ -234,9 +234,11 @@ model requests: 3  (free tier allows 20/day/model)
 
 ## Qodo Code Review Evidence
 
-> **Being straight about this:** Qodo was installed late, after PRs #1–#3 had
-> already merged. Those three carry a written review trail in their descriptions
-> but no Qodo pass. Do not read this section as more than it is.
+Qodo reviews every pull request through
+[`.github/workflows/pr-agent.yml`](.github/workflows/pr-agent.yml), running
+`qodo-ai/pr-agent` on Gemini. It deliberately reviews on a different model from
+the one the agent runs on — the free tier allows 20 requests per day per model,
+and a code review should not eat the demo's budget.
 
 **Pull request history**
 
@@ -245,16 +247,55 @@ model requests: 3  (free tier allows 20/day/model)
 | [#1](https://github.com/JaneshKapoor/sunoai/pull/1) | TrueForge harness bootstrap, Gemini provider, Windows boot patch | merged |
 | [#2](https://github.com/JaneshKapoor/sunoai/pull/2) | Playwright browser-control MCP, tool policy | merged |
 | [#3](https://github.com/JaneshKapoor/sunoai/pull/3) | Login helper, feed reading | merged |
-| [#4](https://github.com/JaneshKapoor/sunoai/pull/4) | Site abstraction, naukri target, quota work | open |
+| [#4](https://github.com/JaneshKapoor/sunoai/pull/4) | Site abstraction, naukri target, quota work, CI | reviewed by Qodo |
 
-**Qodo findings and what changed in response:** _pending — see the note above._
+Qodo was wired up at PR #4, after #1–#3 had merged. Those three carry a written
+review trail in their descriptions but no Qodo pass, and it would be dishonest
+to imply otherwise.
 
-<!--
-  TODO before judging: paste Qodo's actual findings on #4 here, what was changed
-  in response, and anything argued back. Nothing invented goes in this section.
--->
+### What Qodo found, and what changed
 
-**Caught during self-review**, before any tool flagged them:
+**1. The safety check failed open.** ([Qodo’s review](https://github.com/JaneshKapoor/sunoai/pull/4#issuecomment-5470234362))
+
+This is the good one, and it landed on the exact line the whole project rests on.
+
+`runTurnWithRetry` refuses to retry a turn that already called an
+approval-gated tool, because re-running it could submit the same thing twice.
+It decided that by reading the turn's transcript — and swallowed request
+failures with `.catch(() => [])`. An empty event list reads as *"no gated tools
+were called"*.
+
+So a network blip while checking whether a turn had already submitted something
+would let the retry go ahead. The guard against double submission could be
+removed by the kind of transient error it was written to survive.
+
+> **Qodo:** *"If a transient network or API error occurs during this check,
+> `runTurnWithRetry` will proceed to retry the turn even if it previously
+> executed an approval-gated (write) tool, potentially leading to unintended
+> double-submissions."*
+
+Fixed: it now fails closed. If the transcript cannot be read, it reports that
+the turn *may* have written something and declines to retry. Being wrong in that
+direction costs one un-retried turn; being wrong in the other costs a real,
+unretractable write.
+
+**2. An unbounded retry wait could hang the process.** Applied. A hint longer
+than 90 seconds is the daily quota resetting hours away, not a load spike.
+Rather than cap the sleep and fail anyway, it now reports the quota error
+immediately — sleeping through a quota reset would hang the script and, once
+there is a voice client, leave a caller listening to silence.
+
+**3. A missing turn id was not guarded.** Applied. No id means the turn never
+started, so there is nothing to inspect and nothing safe to assume.
+
+**4. The naukri search keyword was not lowercased.** Applied. Its URL routing
+expects lowercase hyphenated paths, and a mixed-case query redirects or 404s.
+
+All four were accepted. Qodo also reported no security concerns and flagged the
+absence of tests, which is a fair hit — the milestone scripts assert against a
+live agent, and there is no unit suite.
+
+### Caught during self-review, before any tool flagged them
 
 - A smoke test printed ✓ while reporting `tools called: (none)`. The answer was
   correct and the event parsing was wrong — without the assertion the check
