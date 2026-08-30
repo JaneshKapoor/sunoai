@@ -19,7 +19,9 @@ export const ITEM_NOUN = 'job';
  */
 export const SEARCH_QUERY = process.env.NAUKRI_QUERY || 'analytics';
 
-export const LIST_URL = `https://www.naukri.com/${SEARCH_QUERY.trim().replace(/\s+/g, '-')}-jobs`;
+// Lowercased: naukri's URL routing expects lowercase hyphenated keywords, and
+// a mixed-case query redirects or 404s.
+export const LIST_URL = `https://www.naukri.com/${SEARCH_QUERY.trim().toLowerCase().replace(/\s+/g, '-')}-jobs`;
 
 /**
  * Ask the agent whether the browser profile is signed in.

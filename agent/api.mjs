@@ -6,6 +6,13 @@
  * here so there is exactly one place that knows the wire format.
  */
 
+/**
+ * Longest a retry will wait before giving up.
+ *
+ * Retry hints past this are daily-quota resets, not load spikes.
+ */
+const MAX_RETRY_WAIT_MS = 90_000;
+
 export class TrueForgeError extends Error {
   constructor(method, path, status, body) {
     super(`${method} ${path} -> ${status}: ${typeof body === 'string' ? body : JSON.stringify(body)}`);
@@ -78,25 +85,58 @@ export class TrueForgeClient {
       const isTransient = /\b(429|503)\b|quota|high demand|rate limit/i.test(message);
       if (!isTransient || attempt === attempts) return lastTurn;
 
-      if (await this.turnTouchedGatedTools(sessionId, lastTurn.id)) {
+      // No id means the turn never really started, so there is nothing to
+      // inspect and nothing safe to assume. Give up rather than guess.
+      if (!lastTurn?.id || (await this.turnTouchedGatedTools(sessionId, lastTurn.id))) {
         return lastTurn;
       }
 
       // "Please retry in 48.35s" — believe the provider over a fixed backoff.
       const hinted = message.match(/retry in ([\d.]+)s/i);
       const waitMs = hinted ? Math.ceil(Number(hinted[1]) * 1000) + 1_000 : attempt * 15_000;
+
+      // A hint longer than this is not a traffic spike, it is the daily quota
+      // resetting hours from now. Sleeping through that would hang the script
+      // (and, once there is one, leave a voice caller listening to silence);
+      // report the quota error instead.
+      if (waitMs > MAX_RETRY_WAIT_MS) {
+        console.warn(
+          `  provider asked to wait ${Math.round(waitMs / 1000)}s, which is a quota reset ` +
+            'rather than a spike; giving up instead of sleeping through it',
+        );
+        return lastTurn;
+      }
       console.warn(`  model unavailable (attempt ${attempt}/${attempts}); retrying in ${Math.round(waitMs / 1000)}s`);
       await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
     return lastTurn;
   }
 
-  /** True if the turn called any tool that requires human approval. */
+  /**
+   * True if the turn called any tool that requires human approval.
+   *
+   * Fails closed. If the transcript cannot be read — a network blip, an API
+   * error, a malformed response — this reports `true`, because not knowing
+   * whether a turn wrote something is not the same as knowing it did not.
+   * Treating "unknown" as "safe" here would let a retry re-run a turn that had
+   * already submitted, which is precisely the accident the gate exists to
+   * prevent. The cost of being wrong in this direction is a turn that is not
+   * retried; the cost of being wrong in the other is a double submission.
+   */
   async turnTouchedGatedTools(sessionId, turnId) {
     const { APPROVAL_REQUIRED_TOOLS } = await import('./definition.mjs');
-    const events = await this.get(
-      `/api/v1/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/events`,
-    ).catch(() => []);
+    let events;
+    try {
+      events = await this.get(
+        `/api/v1/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/events`,
+      );
+    } catch (error) {
+      console.warn(
+        `  could not read the transcript of turn ${turnId} (${error.message}); ` +
+          'assuming it may have written something and not retrying',
+      );
+      return true;
+    }
     return toolCallsIn(events).some((call) => APPROVAL_REQUIRED_TOOLS.includes(call.name));
   }
 
