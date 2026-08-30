@@ -1,0 +1,57 @@
+# Qodo PR-Agent — automated code review on every pull request.
+#
+# Qodo Merge also ships as a GitHub App, but installing an App needs a human to
+# authorise it in the browser; there is no API for it. The same reviewer is
+# published as an action, so it runs here instead and the review trail lands on
+# the PRs either way.
+#
+# It reviews with Gemini via the GEMINI_API_KEY repository secret. That is the
+# same key the agent itself uses, which matters: the free tier allows 20
+# requests per day per model, so the reviewer deliberately runs on a different
+# model from the one the agent runs on. A review should not eat the demo's
+# budget.
+name: Qodo PR Agent
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    # issue_comment fires for plain issues too; only act on pull requests, and
+    # only on comments that actually address the agent.
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event.issue.pull_request != null &&
+       startsWith(github.event.comment.body, '/'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Qodo PR Agent
+        uses: qodo-ai/pr-agent@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_AI_STUDIO.GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CONFIG.MODEL: gemini/gemini-3.5-flash
+          # litellm does not ship a context window for a model this new, so
+          # state it rather than letting the reviewer guess and truncate.
+          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "1048576"
+          CONFIG.PUBLISH_OUTPUT_PROGRESS: "false"
+          # Post findings as one review comment rather than scattering inline
+          # notes; this repo's PRs are small and a single summary is readable.
+          PR_REVIEWER.PERSISTENT_COMMENT: "true"
+          PR_REVIEWER.FINAL_UPDATE_MESSAGE: "false"
+          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
+          GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
+          GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "true"
+          # pr-agent defaults to reviewing only newly opened PRs and logs
+          # "Skipping action: synchronize" for everything else. A PR that gets
+          # reworked after review is exactly the one worth re-reviewing, so
+          # pushes are included explicitly.
+          GITHUB_ACTION_CONFIG.PR_ACTIONS: '["opened","reopened","ready_for_review","review_requested","synchronize"]'

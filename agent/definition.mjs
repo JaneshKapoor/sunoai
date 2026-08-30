@@ -53,6 +53,17 @@ export const APPROVAL_REQUIRED_TOOLS = [
   'browser_select_option',
 ];
 
+/**
+ * Tools a read-only turn may use.
+ *
+ * Not a safety measure — the approval gate covers safety. This is about the
+ * free Gemini tier, which allows 20 requests per day per model. Every tool call
+ * costs another model round-trip, so an agent that can re-snapshot and re-search
+ * will happily spend a day's quota deciding it has not seen enough of the page.
+ * Reading needs exactly two verbs: go there, look once.
+ */
+export const READ_ONLY_TOOLS = ['browser_navigate', 'browser_snapshot'];
+
 export const INSTRUCTIONS = `
 You are SunoAI, a voice-driven assistant that operates a real web browser for the user.
 
@@ -71,6 +82,14 @@ BROWSER
 You control the browser only through your browser tools. Take a snapshot to see
 the page before acting on it — never guess that an element is there.
 
+BE FRUGAL
+Every tool call costs a request against a small daily budget, so work in as few
+steps as you can. Navigate, take ONE snapshot, and answer from what that
+snapshot showed you. Do not take a second snapshot of a page you have already
+looked at, and do not search the page again hoping for a better view. If the
+snapshot genuinely does not contain what was asked for, say so plainly — that
+is a useful answer, and it is much cheaper than guessing your way there.
+
 BEFORE YOU CHANGE ANYTHING
 Clicking, typing, and submitting pause for the user's approval. That is by
 design; it is not an error and you should not try to route around it. When you
@@ -82,18 +101,34 @@ submit anything the user has not heard.
 /**
  * Build an inline agent spec for a TrueForge session.
  *
+ * Two modes:
+ *
+ *   'read' — navigate and look, nothing else. The tool list is cut to two verbs
+ *            and the iteration limit is tight, so a turn that gets confused
+ *            stops instead of re-snapshotting its way through a day's quota.
+ *   'act'  — the full set, minus the denied tools, with writes gated.
+ *
  * @param {object} options
  * @param {string} options.modelFqn  e.g. 'google-gemini/gemini-3-flash-preview'
+ * @param {'read'|'act'} [options.mode='act']
  */
-export function buildAgentSpec({ modelFqn }) {
+export function buildAgentSpec({ modelFqn, mode = 'act' }) {
+  if (mode !== 'read' && mode !== 'act') {
+    throw new Error(`Unknown agent mode "${mode}" (expected 'read' or 'act').`);
+  }
+  const reading = mode === 'read';
+
   return {
     model: { name: modelFqn },
     instructions: INSTRUCTIONS,
     mcp_servers: [
       {
         name: BROWSER_MCP_NAME,
-        enable_tools: ['@all'],
+        enable_tools: reading ? READ_ONLY_TOOLS : ['@all'],
         disable_tools: DENIED_TOOLS,
+        // Declared in both modes. A read turn should never reach these, but if
+        // the tool list is ever widened by accident, the gate is already there
+        // rather than being something someone remembered to add.
         require_approval_for_tools: APPROVAL_REQUIRED_TOOLS,
         // Load the browser tool schemas upfront. Deferred discovery costs an
         // extra model round-trip, and on a voice interface that delay is heard.
@@ -105,9 +140,10 @@ export function buildAgentSpec({ modelFqn }) {
       sandbox: { enabled: false },
       // No subagents: one loop is easier to narrate aloud and to show in the UI.
       dynamic_sub_agents: { enabled: false },
-      // Generous enough for snapshot → read → act, tight enough that a confused
-      // agent stops instead of clicking around a page indefinitely.
-      iteration_limit: 40,
+      // A read is navigate → snapshot → answer, so anything past a handful of
+      // iterations means the agent is going in circles. Acting needs headroom
+      // for the approval pause and the retry after it.
+      iteration_limit: reading ? 6 : 30,
     },
   };
 }

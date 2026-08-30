@@ -6,6 +6,13 @@
  * here so there is exactly one place that knows the wire format.
  */
 
+/**
+ * Longest a retry will wait before giving up.
+ *
+ * Retry hints past this are daily-quota resets, not load spikes.
+ */
+const MAX_RETRY_WAIT_MS = 90_000;
+
 export class TrueForgeError extends Error {
   constructor(method, path, status, body) {
     super(`${method} ${path} -> ${status}: ${typeof body === 'string' ? body : JSON.stringify(body)}`);
@@ -52,6 +59,85 @@ export class TrueForgeClient {
   async createSession(spec) {
     const session = await this.post('/api/v1/sessions', { agent: { spec } });
     return session.id;
+  }
+
+  /**
+   * Run one turn, retrying when the model provider is transiently unavailable.
+   *
+   * The free Gemini tier caps requests per minute, and gemini-3-flash-preview
+   * additionally returns 503 under load. Both surface as a failed turn rather
+   * than a slow one, which on a voice interface means the assistant simply
+   * stops talking. The error text carries a "retry in Ns" hint; we honour it.
+   *
+   * A retry re-runs the whole turn, so it is only safe when the turn changed
+   * nothing. If any approval-gated tool appears in the transcript, we refuse to
+   * retry and surface the error instead — re-running a turn that already
+   * submitted something could submit it twice, and that is precisely the class
+   * of accident this project exists to prevent.
+   */
+  async runTurnWithRetry(sessionId, input, { attempts = 3, ...options } = {}) {
+    let lastTurn;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      lastTurn = await this.runTurn(sessionId, input, options);
+      if (lastTurn.state?.status !== 'error') return lastTurn;
+
+      const message = lastTurn.state.message ?? '';
+      const isTransient = /\b(429|503)\b|quota|high demand|rate limit/i.test(message);
+      if (!isTransient || attempt === attempts) return lastTurn;
+
+      // No id means the turn never really started, so there is nothing to
+      // inspect and nothing safe to assume. Give up rather than guess.
+      if (!lastTurn?.id || (await this.turnTouchedGatedTools(sessionId, lastTurn.id))) {
+        return lastTurn;
+      }
+
+      // "Please retry in 48.35s" — believe the provider over a fixed backoff.
+      const hinted = message.match(/retry in ([\d.]+)s/i);
+      const waitMs = hinted ? Math.ceil(Number(hinted[1]) * 1000) + 1_000 : attempt * 15_000;
+
+      // A hint longer than this is not a traffic spike, it is the daily quota
+      // resetting hours from now. Sleeping through that would hang the script
+      // (and, once there is one, leave a voice caller listening to silence);
+      // report the quota error instead.
+      if (waitMs > MAX_RETRY_WAIT_MS) {
+        console.warn(
+          `  provider asked to wait ${Math.round(waitMs / 1000)}s, which is a quota reset ` +
+            'rather than a spike; giving up instead of sleeping through it',
+        );
+        return lastTurn;
+      }
+      console.warn(`  model unavailable (attempt ${attempt}/${attempts}); retrying in ${Math.round(waitMs / 1000)}s`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+    return lastTurn;
+  }
+
+  /**
+   * True if the turn called any tool that requires human approval.
+   *
+   * Fails closed. If the transcript cannot be read — a network blip, an API
+   * error, a malformed response — this reports `true`, because not knowing
+   * whether a turn wrote something is not the same as knowing it did not.
+   * Treating "unknown" as "safe" here would let a retry re-run a turn that had
+   * already submitted, which is precisely the accident the gate exists to
+   * prevent. The cost of being wrong in this direction is a turn that is not
+   * retried; the cost of being wrong in the other is a double submission.
+   */
+  async turnTouchedGatedTools(sessionId, turnId) {
+    const { APPROVAL_REQUIRED_TOOLS } = await import('./definition.mjs');
+    let events;
+    try {
+      events = await this.get(
+        `/api/v1/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/events`,
+      );
+    } catch (error) {
+      console.warn(
+        `  could not read the transcript of turn ${turnId} (${error.message}); ` +
+          'assuming it may have written something and not retrying',
+      );
+      return true;
+    }
+    return toolCallsIn(events).some((call) => APPROVAL_REQUIRED_TOOLS.includes(call.name));
   }
 
   /**
@@ -128,4 +214,19 @@ export function toolCallsIn(events) {
     }
   }
   return calls;
+}
+
+/**
+ * Count the model requests a turn spent.
+ *
+ * On the free Gemini tier the budget is 20 requests per day per model, so
+ * "how many requests did that cost?" is a question worth being able to answer
+ * without opening a dashboard. Each `model.message` event is one call to the
+ * provider: the initial reasoning step, plus one more per round-trip after a
+ * tool result comes back.
+ *
+ * @param {Array<object>} events  from GET /sessions/{id}/turns/{id}/events
+ */
+export function modelRequestsIn(events) {
+  return (events ?? []).filter((event) => event.type === 'model.message').length;
 }

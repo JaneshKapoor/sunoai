@@ -1,11 +1,22 @@
 /**
- * LinkedIn specifics: URLs, and how the agent is asked about the feed.
+ * LinkedIn: the feed.
  *
- * Kept apart from agent/definition.mjs, which is about what the agent may do.
- * This is about the one site it does it on.
+ * One of the site modules under agent/sites/. Each describes a target site --
+ * where its list of things lives, how to tell whether we are signed in, and how
+ * to ask for the list read back. agent/definition.mjs stays about what the
+ * agent may do; these are about where it does it.
  */
 
-export const FEED_URL = 'https://www.linkedin.com/feed/';
+export const NAME = 'linkedin';
+export const DISPLAY_NAME = 'LinkedIn';
+
+/** What the list items are called, for prompts and script output. */
+export const ITEM_NOUN = 'post';
+
+export const LIST_URL = 'https://www.linkedin.com/feed/';
+
+// Kept for readability in this file; LIST_URL is the interface.
+const FEED_URL = LIST_URL;
 
 /**
  * Ask the agent whether the browser profile is signed in.
@@ -16,7 +27,7 @@ export const FEED_URL = 'https://www.linkedin.com/feed/';
  * suspicious-activity interstitial instead of the feed, that shows up here
  * rather than being silently treated as "logged in".
  */
-export const LOGIN_CHECK_PROMPT = `
+export const loginCheckPrompt = () => `
 Navigate to ${FEED_URL} and take a snapshot.
 
 Then reply with exactly one line and nothing else:
@@ -35,7 +46,7 @@ Do not click anything. Do not try to sign in or solve a challenge.
  * The shape is fixed on purpose: the answer gets spoken, and a numbered list
  * of short summaries is what lets the user say "comment on the second one".
  */
-export function readFeedPrompt(count) {
+export function readListPrompt(count) {
   return `
 Navigate to ${FEED_URL} and take a snapshot of the feed.
 
@@ -45,5 +56,10 @@ the author's name, then what the post is about in one sentence of your own.
 Number them out loud — "Pehla post", "Doosra post" — so I can refer back to one.
 Skip promoted and suggested posts; I only want real posts from the feed.
 Do not click anything.
+
+If you cannot read the list at all — the page is blank, a dialog is covering it,
+or nothing that looks like a result is there — reply with a single line starting
+exactly "NO_RESULTS:" followed by what you actually saw. Do not invent entries,
+and do not look again.
 `.trim();
 }

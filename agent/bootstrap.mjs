@@ -23,16 +23,23 @@ const GEMINI_MODEL_PROPERTIES = {
  * Register Google Gemini as a model provider, exposing both the primary model
  * and a fallback.
  *
- * Two reasons for the fallback. The shipped TrueForge catalog does not list
- * gemini-3-flash-preview at all, so the primary has to be declared by hand
- * either way. And the preview model intermittently returns
- * `503 This model is currently experiencing high demand` — verified against
- * the Gemini API directly, so it is upstream congestion rather than anything
- * in this stack. Registering both means a demo can switch models by editing
- * one line in .env instead of debugging on camera.
+ * Three reasons there is a list rather than one model.
+ *
+ * The shipped TrueForge catalog does not list gemini-3-flash-preview at all,
+ * so the primary has to be declared by hand either way.
+ *
+ * The preview model intermittently returns `503 This model is currently
+ * experiencing high demand` — verified against the Gemini API directly, so it
+ * is upstream congestion rather than anything in this stack.
+ *
+ * And the free tier allows only 20 requests per day *per model*
+ * (GenerateRequestsPerDayPerProjectPerModel-FreeTier). One agent turn spends
+ * three to five of those, so a single model is roughly five turns a day. The
+ * quota is per model, so registering several multiplies the budget — a
+ * workaround, not a fix. The fix is billing; see README.
  */
-async function registerModelProvider(client, { geminiApiKey, geminiModelId, geminiFallbackModelId }) {
-  const modelIds = [...new Set([geminiModelId, geminiFallbackModelId])];
+async function registerModelProvider(client, { geminiApiKey, geminiModelId, geminiFallbackModelIds }) {
+  const modelIds = [...new Set([geminiModelId, ...geminiFallbackModelIds])];
 
   await client.put('/api/v1/settings/model-providers', {
     manifest: {

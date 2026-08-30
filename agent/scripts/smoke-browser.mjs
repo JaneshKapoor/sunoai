@@ -24,7 +24,7 @@ const client = new TrueForgeClient(cfg.trueforgeBaseUrl);
 await client.waitUntilReady();
 
 const sessionId = await client.createSession(
-  buildAgentSpec({ modelFqn: modelFqnFor(cfg.geminiModelId) }),
+  buildAgentSpec({ modelFqn: modelFqnFor(cfg.geminiModelId), mode: 'read' }),
 );
 
 console.log(`session: ${sessionId}`);
