@@ -52,7 +52,7 @@ Do not click anything. Do not try to sign in or solve a challenge.
  */
 export function readListPrompt(count) {
   return `
-Navigate to ${LIST_URL} and take a snapshot of the search results.
+Navigate to ${LIST_URL}. Take ONE snapshot. Then answer from that snapshot.
 
 Read the top ${count} jobs. For each one, give me a single short line:
 the job title, the company, the experience required, and the location.
@@ -61,6 +61,16 @@ than saying so.
 
 Number them out loud — "Pehla job", "Doosra job" — so I can refer back to one.
 Skip any advertisement or sponsored block; I only want real job results.
-Do not click anything.
+
+The results page is long and the snapshot will be large. That is expected.
+Read the ${count} jobs nearest the top of it and stop. Do not take another
+snapshot, do not scroll, and do not click anything. If you can only make out
+fewer than ${count} jobs, tell me the ones you could read and say so — that is
+a better answer than looking again.
+
+If you cannot read the list at all — the page is blank, a dialog is covering it,
+or nothing that looks like a result is there — reply with a single line starting
+exactly "NO_RESULTS:" followed by what you actually saw. Do not invent entries,
+and do not look again.
 `.trim();
 }

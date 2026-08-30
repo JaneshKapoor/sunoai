@@ -56,5 +56,10 @@ the author's name, then what the post is about in one sentence of your own.
 Number them out loud — "Pehla post", "Doosra post" — so I can refer back to one.
 Skip promoted and suggested posts; I only want real posts from the feed.
 Do not click anything.
+
+If you cannot read the list at all — the page is blank, a dialog is covering it,
+or nothing that looks like a result is there — reply with a single line starting
+exactly "NO_RESULTS:" followed by what you actually saw. Do not invent entries,
+and do not look again.
 `.trim();
 }

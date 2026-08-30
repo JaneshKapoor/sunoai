@@ -10,9 +10,9 @@
  * what the voice client will hand to TTS.
  */
 import { config } from '../env.mjs';
-import { TrueForgeClient, toolCallsIn } from '../api.mjs';
+import { TrueForgeClient, toolCallsIn, modelRequestsIn } from '../api.mjs';
 import { buildAgentSpec, modelFqnFor, APPROVAL_REQUIRED_TOOLS } from '../definition.mjs';
-import { resolveSite } from '../sites/index.mjs';
+import { resolveSite, NO_RESULTS_PREFIX } from '../sites/index.mjs';
 
 const DEFAULT_COUNT = 3;
 const MAX_COUNT = 10;
@@ -29,8 +29,10 @@ const cfg = config();
 const client = new TrueForgeClient(cfg.trueforgeBaseUrl);
 await client.waitUntilReady();
 
+// 'read' mode: navigate and snapshot only. On the free tier an agent that can
+// re-snapshot will spend the day's quota looking at the same page again.
 const sessionId = await client.createSession(
-  buildAgentSpec({ modelFqn: modelFqnFor(cfg.geminiModelId) }),
+  buildAgentSpec({ modelFqn: modelFqnFor(cfg.geminiModelId), mode: 'read' }),
 );
 
 console.log(`site:    ${site.DISPLAY_NAME} (${site.LIST_URL})`);
@@ -51,10 +53,13 @@ const events = await client.get(
 );
 const toolNames = toolCallsIn(events).map((call) => call.name);
 
+const reply = (turn.state.output?.content ?? '').trim();
+
 console.log('─'.repeat(70));
-console.log(turn.state.output?.content ?? '(no reply)');
+console.log(reply || '(no reply)');
 console.log('─'.repeat(70));
-console.log(`\ntools called: ${toolNames.join(', ') || '(none)'}`);
+console.log(`\ntools called:   ${toolNames.join(', ') || '(none)'}`);
+console.log(`model requests: ${modelRequestsIn(events)}  (free tier allows 20/day/model)`);
 
 // Reading must not touch anything. If a gated tool shows up here, the agent
 // reached for a write during a pure read — worth failing over even though the
@@ -66,6 +71,12 @@ if (gated.length > 0) {
 }
 if (toolNames.length === 0) {
   console.error('\n✗ The agent answered without touching the browser.');
+  process.exit(1);
+}
+if (reply.startsWith(NO_RESULTS_PREFIX)) {
+  console.error(`\n✗ The agent reached the page but could not read any ${site.ITEM_NOUN}s.`);
+  console.error('  Its own account of what it saw is above. Reporting that beats');
+  console.error('  printing a tick over an empty answer.');
   process.exit(1);
 }
 

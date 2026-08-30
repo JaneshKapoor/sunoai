@@ -175,3 +175,18 @@ export function toolCallsIn(events) {
   }
   return calls;
 }
+
+/**
+ * Count the model requests a turn spent.
+ *
+ * On the free Gemini tier the budget is 20 requests per day per model, so
+ * "how many requests did that cost?" is a question worth being able to answer
+ * without opening a dashboard. Each `model.message` event is one call to the
+ * provider: the initial reasoning step, plus one more per round-trip after a
+ * tool result comes back.
+ *
+ * @param {Array<object>} events  from GET /sessions/{id}/turns/{id}/events
+ */
+export function modelRequestsIn(events) {
+  return (events ?? []).filter((event) => event.type === 'model.message').length;
+}
