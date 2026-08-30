@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="SunoAI - a Hinglish browser agent built on the TrueForge agent harness that stops for human approval before any write.">
+<meta property="og:title" content="SunoAI">
+<meta property="og:description" content="A browser agent you talk to in Hinglish - that stops and asks before it ever writes anything.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128721;</text></svg>">
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+</style>
+<title>SunoAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;700&display=swap">
+
+<style>
+  /* Dark-first: the subject is a harness transcript, and the page reads as one.
+     Light theme is a full, deliberate counterpart, not an inversion. */
+  :root {
+    --ground:      #0f1216;
+    --surface:     #161b21;
+    --surface-2:   #1c2229;
+    --rule:        #2a323b;
+    --rule-soft:   #212930;
+    --text:        #dde3e9;
+    --text-dim:    #939ea9;
+    --text-faint:  #6b7681;
+
+    --clear:       #57b39f;   /* ungated - reads flow */
+    --hold:        #d9a13f;   /* gated - stops for a human */
+    --deny:        #c25a4c;   /* denied outright */
+    --clear-bg:    #57b39f1c;
+    --hold-bg:     #d9a13f1c;
+    --deny-bg:     #c25a4c1c;
+
+    --font-display: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+    --font-body:    "Source Serif 4", Georgia, "Times New Roman", serif;
+    --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 34rem;
+    --wide: 60rem;
+  }
+
+  :root[data-theme="light"] {
+    --ground:      #eef0f1;
+    --surface:     #ffffff;
+    --surface-2:   #f6f7f8;
+    --rule:        #cdd4da;
+    --rule-soft:   #e0e5e9;
+    --text:        #171c21;
+    --text-dim:    #4e5962;
+    --text-faint:  #79848d;
+
+    --clear:       #2b7f6c;
+    --hold:        #9a6a12;
+    --deny:        #a13d31;
+    --clear-bg:    #2b7f6c14;
+    --hold-bg:     #9a6a1214;
+    --deny-bg:     #a13d3114;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ground:      #eef0f1;
+      --surface:     #ffffff;
+      --surface-2:   #f6f7f8;
+      --rule:        #cdd4da;
+      --rule-soft:   #e0e5e9;
+      --text:        #171c21;
+      --text-dim:    #4e5962;
+      --text-faint:  #79848d;
+
+      --clear:       #2b7f6c;
+      --hold:        #9a6a12;
+      --deny:        #a13d31;
+      --clear-bg:    #2b7f6c14;
+      --hold-bg:     #9a6a1214;
+      --deny-bg:     #a13d3114;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding: 0 1.5rem 6rem;
+  }
+
+  .col { max-width: var(--measure); }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  /* ---------- hero ---------- */
+
+  header.hero {
+    border-bottom: 1px solid var(--rule);
+    padding: 4.5rem 0 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  h1 {
+    font-size: clamp(2.75rem, 8vw, 4.75rem);
+    font-weight: 800;
+    letter-spacing: -.035em;
+    line-height: .95;
+  }
+
+  .thesis {
+    font-size: clamp(1.2rem, 2.6vw, 1.5rem);
+    line-height: 1.45;
+    max-width: 30ch;
+    color: var(--text);
+  }
+
+  .thesis strong { font-weight: 600; color: var(--hold); }
+
+  .byline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1.25rem;
+    align-items: baseline;
+  }
+
+  /* the spoken exchange - the most characteristic thing in this project */
+  .exchange {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1.5rem;
+    max-width: 42rem;
+  }
+
+  .line { display: flex; gap: .85rem; align-items: baseline; }
+
+  .who {
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    flex: 0 0 4.5rem;
+    text-align: right;
+    padding-top: .2em;
+  }
+
+  .said { font-size: 1.05rem; }
+  .said em { font-style: italic; color: var(--text-dim); }
+
+  .line.halt .said { color: var(--hold); font-weight: 600; }
+  .line.halt .who  { color: var(--hold); }
+
+  /* ---------- sections ---------- */
+
+  section { padding: 3.5rem 0 0; }
+
+  h2 {
+    font-size: clamp(1.5rem, 3.4vw, 2rem);
+    font-weight: 800;
+    letter-spacing: -.02em;
+    margin-bottom: .75rem;
+  }
+
+  h3 {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: -.005em;
+    margin-bottom: .35rem;
+  }
+
+  p { margin: 0 0 1rem; }
+  p:last-child { margin-bottom: 0; }
+
+  a { color: inherit; text-decoration-color: var(--text-faint); text-underline-offset: .18em; }
+  a:hover { text-decoration-color: currentColor; }
+  a:focus-visible { outline: 2px solid var(--hold); outline-offset: 3px; border-radius: 2px; }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: .85em;
+    background: var(--surface-2);
+    border: 1px solid var(--rule-soft);
+    border-radius: 2px;
+    padding: .08em .32em;
+  }
+
+  /* ---------- the policy ledger: the centrepiece ---------- */
+
+  .ledger {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 1.75rem;
+  }
+
+  .tier { background: var(--surface); padding: 1.25rem 1.4rem; border-left: 3px solid var(--tier-color); }
+  .tier.deny  { --tier-color: var(--deny);  background: linear-gradient(var(--deny-bg), var(--deny-bg)), var(--surface); }
+  .tier.hold  { --tier-color: var(--hold);  background: linear-gradient(var(--hold-bg), var(--hold-bg)), var(--surface); }
+  .tier.clear { --tier-color: var(--clear); background: linear-gradient(var(--clear-bg), var(--clear-bg)), var(--surface); }
+
+  .tier-head {
+    display: flex;
+    align-items: baseline;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin-bottom: .5rem;
+  }
+
+  .stamp {
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    padding: .2em .55em;
+    border: 1px solid var(--tier-color);
+    color: var(--tier-color);
+    border-radius: 2px;
+  }
+
+  .tier-why { color: var(--text-dim); font-size: .95rem; }
+
+  .tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-top: .85rem;
+    list-style: none;
+    padding: 0;
+  }
+
+  .tools li {
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    padding: .22em .5em;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    background: var(--surface-2);
+    color: var(--text-dim);
+  }
+
+  .pull {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.1rem, 2.4vw, 1.35rem);
+    line-height: 1.4;
+    letter-spacing: -.012em;
+    border-left: 3px solid var(--hold);
+    padding: .1rem 0 .1rem 1.15rem;
+    margin: 1.75rem 0;
+    max-width: 40ch;
+    text-wrap: balance;
+  }
+
+  /* ---------- status table ---------- */
+
+  .table-scroll { overflow-x: auto; margin-top: 1.5rem; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 30rem;
+    font-family: var(--font-display);
+    font-size: .92rem;
+  }
+
+  th, td {
+    text-align: left;
+    padding: .7rem .9rem;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+
+  thead th {
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    font-weight: 600;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  td.num { font-family: var(--font-mono); color: var(--text-faint); width: 3rem; font-variant-numeric: tabular-nums; }
+
+  .state {
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .state.ok      { color: var(--clear); }
+  .state.partial { color: var(--hold); }
+  .state.no      { color: var(--text-faint); }
+
+  /* ---------- code blocks ---------- */
+
+  pre {
+    font-family: var(--font-mono);
+    font-size: .8rem;
+    line-height: 1.6;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1.1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1.25rem 0;
+  }
+
+  pre .cmt { color: var(--text-faint); }
+  pre .bad { color: var(--deny); }
+  pre .good { color: var(--clear); }
+  pre .warn { color: var(--hold); }
+
+  .split {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+  @media (min-width: 46rem) { .split { grid-template-columns: 1fr 1fr; } }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1.25rem 1.4rem;
+  }
+
+  .card .eyebrow { display: block; margin-bottom: .5rem; }
+
+  /* ---------- notice ---------- */
+
+  .notice {
+    border: 1px solid var(--hold);
+    background: var(--hold-bg);
+    border-radius: 3px;
+    padding: 1.25rem 1.4rem;
+    margin-top: 1.75rem;
+  }
+  .notice .eyebrow { color: var(--hold); display: block; margin-bottom: .5rem; }
+
+  /* ---------- links row ---------- */
+
+  .links { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.75rem; }
+
+  .btn {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: .95rem;
+    text-decoration: none;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    color: var(--text);
+    padding: .6rem 1.1rem;
+    border-radius: 3px;
+    transition: border-color .15s, background .15s;
+  }
+  .btn:hover { border-color: var(--hold); background: var(--surface-2); }
+  .btn.primary { border-color: var(--hold); color: var(--hold); }
+
+  footer {
+    margin-top: 4.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    color: var(--text-faint);
+    font-size: .85rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="byline">
+      <span class="eyebrow">Team Spambots</span>
+      <span class="eyebrow">TrueForge Agent Harness Hackathon</span>
+    </div>
+
+    <h1>SunoAI</h1>
+
+    <p class="thesis">
+      A browser agent you talk to in Hinglish — that <strong>stops and asks</strong>
+      before it ever writes anything.
+    </p>
+
+    <div class="exchange">
+      <div class="line">
+        <span class="who">You</span>
+        <span class="said"><em>“Analytics jobs dikhao.”</em></span>
+      </div>
+      <div class="line">
+        <span class="who">SunoAI</span>
+        <span class="said">Opens Chrome, reads the top three back to you.</span>
+      </div>
+      <div class="line">
+        <span class="who">You</span>
+        <span class="said"><em>“Doosre wale pe apply karo.”</em></span>
+      </div>
+      <div class="line halt">
+        <span class="who">Held</span>
+        <span class="said">Drafts it, reads it back — and waits.</span>
+      </div>
+      <div class="line">
+        <span class="who">You</span>
+        <span class="said"><em>“Haan, kar do.”</em></span>
+      </div>
+      <div class="line">
+        <span class="who">SunoAI</span>
+        <span class="said">Only now does it submit.</span>
+      </div>
+    </div>
+
+    <div class="links">
+      <a class="btn primary" href="https://github.com/JaneshKapoor/sunoai">Source on GitHub</a>
+      <a class="btn" href="https://github.com/JaneshKapoor/sunoai/pull/4">Qodo review trail</a>
+    </div>
+  </header>
+
+  <section>
+    <div class="col">
+      <span class="eyebrow">The harness</span>
+      <h2>TrueForge is the agent</h2>
+      <p>
+        Not a wrapper around one. TrueForge owns the tool-calling loop, the model
+        connection, the MCP connection, and the approval gate. This repository never
+        calls Gemini directly and never drives Playwright directly.
+      </p>
+      <p>
+        <code>gemini-3-flash-preview</code> is registered as a provider through
+        TrueForge's settings API. A real Playwright MCP server is registered as a
+        connector — TrueForge's connector manifest has only a <code>remote</code>
+        variant, with no stdio transport, so the MCP server runs as its own HTTP
+        process and the harness dials it.
+      </p>
+      <p>
+        The gate itself is <code>require_approval_for_tools</code> in the agent
+        manifest. The harness emits <code>tool.approval_required</code> and will not
+        proceed until the client resumes the turn with a
+        <code>user.tool_approval</code> decision.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <span class="eyebrow">The policy</span>
+      <h2>Three tiers, not two</h2>
+      <p>
+        Most of the thinking in this project went here. Splitting tools into
+        “allowed” and “gated” is not enough, because some tools can reach a write
+        without looking like one.
+      </p>
+    </div>
+
+    <div class="ledger">
+      <div class="tier deny">
+        <div class="tier-head">
+          <span class="stamp">Denied</span>
+          <span class="tier-why">Never available to the model, at any point</span>
+        </div>
+        <p style="margin:0; color:var(--text-dim); font-size:.95rem;">
+          These execute arbitrary JavaScript in the page. The model could submit a
+          form with a scripted click and the harness would only ever see a
+          read-shaped tool call.
+        </p>
+        <ul class="tools">
+          <li>browser_evaluate</li>
+          <li>browser_run_code_unsafe</li>
+          <li>browser_file_upload</li>
+          <li>browser_drop</li>
+        </ul>
+      </div>
+
+      <div class="tier hold">
+        <div class="tier-head">
+          <span class="stamp">Held for approval</span>
+          <span class="tier-why">Pauses the turn until a human decides</span>
+        </div>
+        <p style="margin:0; color:var(--text-dim); font-size:.95rem;">
+          Everything left that can change a page. Listed by name rather than through
+          TrueForge's <code>@write</code> preset, whose meaning comes from tool
+          metadata we do not control.
+        </p>
+        <ul class="tools">
+          <li>browser_click</li>
+          <li>browser_type</li>
+          <li>browser_fill_form</li>
+          <li>browser_press_key</li>
+          <li>browser_select_option</li>
+        </ul>
+      </div>
+
+      <div class="tier clear">
+        <div class="tier-head">
+          <span class="stamp">Ungated</span>
+          <span class="tier-why">Runs freely, on purpose</span>
+        </div>
+        <p style="margin:0; color:var(--text-dim); font-size:.95rem;">
+          Reads are not gated. Asking a person to approve every page view trains them
+          to approve on reflex — which is how approval gates quietly stop working.
+        </p>
+        <ul class="tools">
+          <li>browser_navigate</li>
+          <li>browser_snapshot</li>
+          <li>browser_find</li>
+          <li>browser_take_screenshot</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="pull">
+      A gate only means something if every route to a write passes through a tool
+      it covers.
+    </p>
+  </section>
+
+  <section>
+    <div class="col">
+      <span class="eyebrow">Code review</span>
+      <h2>Qodo found the hole</h2>
+      <p>
+        Qodo reviews every pull request through a <code>pr-agent</code> workflow. On
+        PR&nbsp;#4 it landed on the exact line the whole project rests on.
+      </p>
+      <p>
+        The retry logic refuses to re-run a turn that already called a gated tool,
+        so a transient error can never cause a double submission. It decided that by
+        reading the turn's transcript — and swallowed request failures.
+      </p>
+    </div>
+
+<pre><span class="cmt">// An empty event list reads as "no gated tools were called".</span>
+const events = await this.get(<span class="cmt">/* … */</span>)
+  .catch(() =&gt; []);   <span class="bad">← fails open</span>
+</pre>
+
+    <div class="col">
+      <p>
+        So a network blip while checking whether a turn had already submitted
+        something would let the retry proceed. The guard against double submission
+        could be removed by exactly the kind of transient error it was written to
+        survive.
+      </p>
+    </div>
+
+<pre><span class="cmt">// Fixed: not knowing is not the same as knowing it was safe.</span>
+} catch (error) {
+  console.warn(<span class="cmt">/* … could not read the transcript … */</span>);
+  return true;   <span class="good">← fails closed</span>
+}
+</pre>
+
+    <div class="col">
+      <p>
+        Being wrong in that direction costs one un-retried turn. Being wrong in the
+        other costs a real, unretractable write.
+      </p>
+      <p>
+        Three further findings were accepted in the same review: an unbounded retry
+        wait, an unguarded turn id, and URL casing on the search keyword.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <span class="eyebrow">Status</span>
+      <h2>What actually runs</h2>
+      <p>
+        Stated plainly, because a judge is going to clone the repository and find
+        out anyway.
+      </p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th class="num">#</th><th>Milestone</th><th>State</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">1</td><td>TrueForge harness + Gemini 3 Flash responding</td><td class="state ok">Works</td></tr>
+          <tr><td class="num">1b</td><td>Browser-control MCP navigating and extracting text</td><td class="state ok">Works</td></tr>
+          <tr><td class="num">2</td><td>Read the top listings back, typed input</td><td class="state partial">Runs; blocked on naukri by a cookie modal</td></tr>
+          <tr><td class="num">3</td><td>Draft → approval gate → submit</td><td class="state partial">Policy enforced; runtime flow unscripted</td></tr>
+          <tr><td class="num">4</td><td>Voice: speech in, speech out</td><td class="state no">Not built</td></tr>
+          <tr><td class="num">5</td><td>“Jarvis” status UI</td><td class="state no">Not built</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="notice">
+      <span class="eyebrow">The voice layer is not built</span>
+      <p style="margin:0; color:var(--text-dim);">
+        The name says voice and the architecture is designed around it, but the audio
+        client is not written. What exists is the agent and the safety model
+        underneath it, driven by typed text.
+      </p>
+    </div>
+
+    <div class="split">
+      <div class="card">
+        <span class="eyebrow">Obstacle one</span>
+        <h3>TrueForge does not start on Windows</h3>
+        <p style="color:var(--text-dim); font-size:.95rem;">
+          Its migrations hand <code>import()</code> a bare <code>C:\</code> path;
+          Node's ESM loader rejects it and the server dies before it ever listens.
+          The repository ships a postinstall patch that routes the path through
+          <code>pathToFileURL()</code>.
+        </p>
+      </div>
+      <div class="card">
+        <span class="eyebrow">Obstacle two</span>
+        <h3>20 requests per day, per model</h3>
+        <p style="color:var(--text-dim); font-size:.95rem;">
+          Not per minute. One agent turn spent three to five, so a model lasted about
+          six turns. Two were exhausted in a single afternoon. Getting a turn from
+          nine requests down to three is why milestones four and five are not here.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <span class="eyebrow">Running it</span>
+      <h2>Local by design</h2>
+      <p>
+        There is no hosted instance, and there should not be. TrueForge's standalone
+        mode prints its own warning that it is not hardened for shared internet
+        access, and the agent drives a real Chrome carrying a real logged-in session.
+        Putting that behind a public URL would hand strangers a signed-in browser.
+      </p>
+    </div>
+
+<pre><span class="cmt"># three terminals</span>
+npm run harness        <span class="cmt"># TrueForge      → localhost:8790</span>
+npm run browser        <span class="cmt"># Playwright MCP → localhost:8931</span>
+npm run bootstrap      <span class="cmt"># register model + connector</span>
+
+<span class="cmt"># then</span>
+npm run smoke:browser  <span class="cmt"># agent drives Chrome through MCP</span>
+npm run read -- 3      <span class="cmt"># reads the top three listings back</span>
+
+tools called:   browser_navigate, browser_snapshot
+model requests: 3      <span class="warn"># free tier allows 20/day/model</span>
+</pre>
+
+    <div class="links">
+      <a class="btn primary" href="https://github.com/JaneshKapoor/sunoai">github.com/JaneshKapoor/sunoai</a>
+    </div>
+  </section>
+
+  <footer>
+    SunoAI · Team Spambots · Built on the TrueForge agent harness with Gemini 3 Flash
+    and a Playwright browser-control MCP server. This is a project page, not a live
+    instance of the agent.
+  </footer>
+
+</div>
+</body>
+</html>

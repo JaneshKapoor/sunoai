@@ -2,6 +2,8 @@
 
 **Team Spambots** · TrueForge Agent Harness Hackathon
 
+**Project page:** https://sunoai-agent.vercel.app · **Source:** you are here
+
 A browser agent you talk to in Hinglish — that **stops and asks before it ever
 writes anything**.
 
@@ -310,6 +312,18 @@ live agent, and there is no unit suite.
 
 ---
 
+## The project page
+
+[sunoai-agent.vercel.app](https://sunoai-agent.vercel.app) is a static page built
+from [`web/index.html`](web/index.html) and deployed to Vercel. It documents the
+project; **it is not a running instance of the agent, and there isn't one.**
+
+That is deliberate. TrueForge's standalone mode prints its own warning that it is
+not hardened for shared internet access, and the agent drives a real Chrome
+carrying a real signed-in session — putting that behind a public URL would hand
+strangers a logged-in browser. The agent runs on your machine, against your
+browser, under your approval. Anything else would be a worse product.
+
 ## Project layout
 
 ```
@@ -321,6 +335,7 @@ agent/
   sites/            per-site URLs and prompts (naukri, linkedin)
   scripts/          milestone checks
 scripts/            launchers and the Windows patch
+web/                the static project page deployed to Vercel
 ```
 
 ## Scope
