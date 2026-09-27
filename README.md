@@ -1,7 +1,6 @@
 # SunoAI
 
 **Team Spambots** · TrueForge Agent Harness Hackathon
-Made by Janesh Kapoor
 
 **Project page:** https://sunoai-agent.vercel.app · **Source:** you are here
 
